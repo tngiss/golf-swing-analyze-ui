@@ -161,9 +161,7 @@ function VoiceInputBar({
   onSend: () => void; // parent uses static scripted message
 }) {
   const [listening, setListening] = useState(false);
-  const [bars, setBars] = useState<number[]>(() =>
-    Array.from({ length: 24 }, () => 0)
-  );
+  const [level, setLevel] = useState(0); // 0..1 audio level for animations
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -171,17 +169,20 @@ function VoiceInputBar({
   const timeDataRef = useRef<Uint8Array | null>(null);
   const rafRef = useRef<number | null>(null);
 
-  const silenceTimeoutRef = useRef<number | null>(null);
   const hardTimeoutRef = useRef<number | null>(null);
+
+  const lastActiveAtRef = useRef<number>(0);
+  const calibSumRef = useRef(0);
+  const calibCountRef = useRef(0);
+
+  // Robust guards against stale state and double-send
+  const listeningRef = useRef(false);
+  const sentRef = useRef(false);
 
   const cleanup = useCallback(() => {
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
-    }
-    if (silenceTimeoutRef.current) {
-      window.clearTimeout(silenceTimeoutRef.current);
-      silenceTimeoutRef.current = null;
     }
     if (hardTimeoutRef.current) {
       window.clearTimeout(hardTimeoutRef.current);
@@ -199,31 +200,24 @@ function VoiceInputBar({
     }
     analyserRef.current = null;
     timeDataRef.current = null;
-    setBars(Array.from({ length: 24 }, () => 0));
+    calibSumRef.current = 0;
+    calibCountRef.current = 0;
+    setLevel(0);
   }, []);
 
   const stopAndSend = useCallback(() => {
-    if (!listening) return;
+    if (sentRef.current) return;
+    sentRef.current = true;
+
+    console.log("stopping; listeningRef =", listeningRef.current);
     cleanup();
+    listeningRef.current = false;
     setListening(false);
     onSend();
-  }, [cleanup, listening, onSend]);
-
-  const armSilence = useCallback(
-    (ms: number) => {
-      if (silenceTimeoutRef.current) {
-        window.clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-      silenceTimeoutRef.current = window.setTimeout(() => {
-        stopAndSend();
-      }, ms);
-    },
-    [stopAndSend]
-  );
+  }, [cleanup, onSend]);
 
   const startListening = useCallback(async () => {
-    if (disabled || listening) return;
+    if (disabled || listeningRef.current) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -245,70 +239,74 @@ function VoiceInputBar({
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.7;
+      analyser.smoothingTimeConstant = 0.6;
       analyserRef.current = analyser;
       source.connect(analyser);
 
       const time = new Uint8Array(analyser.fftSize);
       timeDataRef.current = time;
 
+      // set "recording" flags
+      sentRef.current = false;
+      listeningRef.current = true;
       setListening(true);
 
-      // Auto-send even if totally silent
-      const SILENCE_MS = 1200;
-      const MAX_MS = 15000;
-      armSilence(SILENCE_MS);
+      // Silence detection config
+      const SILENCE_MS = 1000; // auto-send after 1s of no activity
+      const MAX_MS = 15000; // hard cap
+      lastActiveAtRef.current = Date.now(); // ensures even initial silence triggers auto-send
+
       hardTimeoutRef.current = window.setTimeout(() => stopAndSend(), MAX_MS);
 
-      // Dynamic baseline calibration for the first ~300ms
-      let calibFrames = 0;
-      let baseline = 0;
-
-      const groups = 24;
-      const samplesPerGroup = Math.floor(time.length / groups) || 1;
+      // Reset calibration
+      calibSumRef.current = 0;
+      calibCountRef.current = 0;
 
       const tick = () => {
-        if (!analyserRef.current || !timeDataRef.current) return;
-
-        analyserRef.current.getByteTimeDomainData(timeDataRef.current);
-
-        // Compute per-group amplitude from time-domain data
+        const analyserNode = analyserRef.current;
         const td = timeDataRef.current;
-        const newBars: number[] = new Array(groups).fill(0);
-        let totalRms = 0;
+        if (!analyserNode || !td) return;
 
-        for (let g = 0; g < groups; g++) {
-          const start = g * samplesPerGroup;
-          const end = Math.min(td.length, start + samplesPerGroup);
-          let acc = 0;
-          for (let i = start; i < end; i++) {
-            const v = (td[i] - 128) / 128; // -1..1
-            acc += Math.abs(v);
-          }
-          const avgAbs = acc / Math.max(1, end - start); // 0..1
-          newBars[g] = avgAbs; // keep 0..1
-          totalRms += avgAbs * avgAbs;
+        analyserNode.getByteTimeDomainData(td);
+
+        // Compute RMS
+        let sumSquares = 0;
+        for (let i = 0; i < td.length; i++) {
+          const v = (td[i] - 128) / 128;
+          sumSquares += v * v;
         }
+        let rms = Math.sqrt(sumSquares / td.length);
+        rms = Math.min(1, rms * 2.5); // mild visual boost
 
-        // Push bars visibly (scale to pixels later in render)
-        setBars(newBars);
-
-        // Global RMS
-        const rms = Math.sqrt(totalRms / groups); // 0..~1
-
-        // Calibrate baseline for noise floor
-        if (calibFrames < 18) {
-          baseline += rms;
-          calibFrames++;
+        // Calibrate ambient baseline for ~300ms
+        if (calibCountRef.current < 18) {
+          calibSumRef.current += rms;
+          calibCountRef.current += 1;
         }
+        const base =
+          calibCountRef.current > 0
+            ? calibSumRef.current / calibCountRef.current
+            : 0.01;
 
-        const base = calibFrames > 0 ? baseline / calibFrames : 0.01;
-        const threshold = Math.min(Math.max(base + 0.02, 0.02), 0.08);
+        // Dynamic threshold above noise floor
+        const threshold = Math.min(Math.max(base + 0.02, 0.02), 0.25);
 
-        // If above threshold (speech/noise), re-arm silence timer
+        const now = Date.now();
         if (rms > threshold) {
-          armSilence(SILENCE_MS);
+          lastActiveAtRef.current = now; // activity detected
         }
+
+        // Auto-stop after silence window
+        if (now - lastActiveAtRef.current >= SILENCE_MS) {
+          stopAndSend();
+          return;
+        }
+
+        // Smooth visual level 0..1
+        setLevel((prev) => {
+          const target = Math.min(1, rms / 0.35);
+          return prev * 0.65 + target * 0.35;
+        });
 
         rafRef.current = requestAnimationFrame(tick);
       };
@@ -318,17 +316,22 @@ function VoiceInputBar({
       // If mic fails, still proceed so UX isn't blocked
       stopAndSend();
     }
-  }, [armSilence, disabled, listening, stopAndSend]);
+  }, [disabled, stopAndSend]);
 
   const handleButtonClick = () => {
     if (disabled) return;
-    if (!listening) startListening();
+    if (!listeningRef.current) startListening();
     else stopAndSend();
   };
 
   useEffect(() => {
     return () => cleanup();
   }, [cleanup]);
+
+  // Map level to responsive animations
+  const outerGlowOpacity = listening ? 0.25 + level * 0.6 : 0.25;
+  const outerGlowScale = listening ? 1 + level * 0.3 : 1;
+  const plateScale = listening ? 1 + level * 0.06 : 1;
 
   return (
     <div className="w-full">
@@ -340,61 +343,51 @@ function VoiceInputBar({
             className="relative w-28 h-28 rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700/60 bg-zinc-800/60"
             whileHover={{ scale: disabled ? 1 : 1.05 }}
             whileTap={{ scale: disabled ? 1 : 0.95 }}
-            animate={{ rotate: listening ? [0, 3, -3, 0] : 0 }}
-            transition={{
-              rotate: { duration: 2, repeat: listening ? Infinity : 0 },
-            }}
           >
+            {/* Background light that reacts to noise level */}
             <motion.div
               className="absolute inset-0 rounded-full blur-2xl"
               style={{ background: "rgba(16, 185, 129, 0.35)" }}
-              animate={{
-                scale: listening ? [1, 1.2, 1] : [1, 1.05, 1],
-                opacity: listening ? [0.45, 0.75, 0.45] : [0.25, 0.45, 0.25],
-              }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              animate={{ scale: outerGlowScale, opacity: outerGlowOpacity }}
+              transition={{ type: "spring", stiffness: 140, damping: 18 }}
             />
-            <div className="absolute inset-4 rounded-full bg-white/10 backdrop-blur-sm" />
+
+            {/* Inner plate responding to noise */}
+            <motion.div
+              className="absolute inset-4 rounded-full bg-white/10 backdrop-blur-sm"
+              animate={{ scale: plateScale }}
+              transition={{ type: "spring", stiffness: 180, damping: 16 }}
+            />
+
+            {/* Icon / mini bars react to level */}
             <div className="relative z-10">
               {listening ? (
-                <div className="flex gap-1.5">
-                  {[...Array(3)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="w-1.5 h-6 bg-white rounded-full"
-                      animate={{ scaleY: [1, 1.8, 1] }}
-                      transition={{
-                        duration: 0.8,
-                        repeat: Infinity,
-                        delay: i * 0.15,
-                      }}
-                    />
-                  ))}
+                <div className="flex gap-1.5 items-end">
+                  {[0, 1, 2].map((i) => {
+                    const barScale = Math.max(
+                      0.6,
+                      Math.min(2, 0.7 + level * (1 + i * 0.25))
+                    );
+                    return (
+                      <motion.div
+                        key={i}
+                        className="w-1.5 bg-white rounded-full origin-bottom"
+                        style={{ height: "24px" }}
+                        animate={{ scaleY: barScale }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 220,
+                          damping: 18,
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <Mic className="w-10 h-10 text-white" />
               )}
             </div>
           </motion.button>
-        </div>
-
-        <div className="flex items-end justify-center gap-1.5 h-14">
-          {bars.map((v, i) => {
-            // Map 0..~1 to visible pixels: 6..60
-            const px = Math.max(6, Math.min(60, Math.round(v * 60)));
-            return (
-              <div
-                key={i}
-                className="w-1.5 rounded-full transition-[height,background] duration-80"
-                style={{
-                  height: `${listening ? px : 6}px`,
-                  background: listening
-                    ? "linear-gradient(180deg, rgba(16,185,129,0.95), rgba(16,185,129,0.45))"
-                    : "rgba(63,63,70,0.6)",
-                }}
-              />
-            );
-          })}
         </div>
       </div>
     </div>
@@ -624,24 +617,23 @@ export function TextChat({ language, onBack }: TextChatProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
-              <motion.div
-                initial={{ y: "40vh", scale: 0.8 }}
-                animate={{ y: 0, scale: 1 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className="p-6 pb-4 flex-shrink-0"
-              >
-                <div className="max-w-md mx-auto">
-                  <div className="relative rounded-2xl overflow-hidden border border-zinc-800/50 shadow-2xl">
-                    <video
-                      src={videoUrl || ""}
-                      controls
-                      className="w-full h-48 object-cover bg-zinc-900"
-                    />
-                  </div>
-                </div>
-              </motion.div>
-
               <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
+                <motion.div
+                  initial={{ y: "40vh", scale: 0.8 }}
+                  animate={{ y: 0, scale: 1 }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  className="p-6 pb-4 flex-shrink-0"
+                >
+                  <div className="max-w-md mx-auto">
+                    <div className="relative rounded-2xl overflow-hidden border border-zinc-800/50 shadow-2xl">
+                      <video
+                        src={videoUrl || ""}
+                        controls
+                        className="w-full h-48 object-cover bg-zinc-900"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
                 <div className="max-w-3xl mx-auto space-y-4">
                   <AnimatePresence mode="popLayout">
                     {messages.map((message) => (
