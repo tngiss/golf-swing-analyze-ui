@@ -577,7 +577,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
     isResponding || isAnalyzing || convIndex >= conversations[language].length;
 
   return (
-    <div className="h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white relative overflow-hidden flex flex-col">
+    <div className="h-dvh bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white relative overflow-hidden flex flex-col">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"

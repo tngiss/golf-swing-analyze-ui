@@ -7,7 +7,7 @@ interface LanguageSelectProps {
 
 export function LanguageSelect({ onSelect }: LanguageSelectProps) {
   return (
-    <div className="min-h-screen py-4 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-dvh py-4 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white relative overflow-hidden flex items-center justify-center">
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {[...Array(20)].map((_, i) => (
