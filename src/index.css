@@ -98,6 +98,10 @@
   :root {
     color-scheme: dark;
   }
+  #root {
+    min-height: 100dvh;
+    background: var(--background);
+  }
   * {
     @apply border-border outline-ring/50;
   }
