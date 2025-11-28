@@ -95,6 +95,9 @@
 }
 
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
   * {
     @apply border-border outline-ring/50;
   }
