@@ -6,6 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
+    <!-- Safari/Chrome bar color -->
     <meta name="theme-color" content="#000000" />
     <meta
       name="theme-color"
@@ -17,20 +18,27 @@
       media="(prefers-color-scheme: dark)"
       content="#000000"
     />
+
+    <!-- iOS PWA status bar (safe if present even in Safari) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
+
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <title>MLR React App</title>
 
     <style>
-      /* Only paint the page chrome behind Safari’s bars */
-      html {
-        background: #000;
+      /* Make the area behind Safari’s UI dark, but keep your app’s own background */
+      html,
+      body {
+        background: #000 !important;
+        margin: 0;
+        height: 100%;
+        color-scheme: dark;
       }
-      /* Do NOT set #root or body to black here */
+      /* Do NOT set #root to black here; your index.css already sets its background */
     </style>
   </head>
   <body>
