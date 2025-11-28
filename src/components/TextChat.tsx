@@ -175,6 +175,10 @@ function VoiceInputBar({
   const calibSumRef = useRef(0);
   const calibCountRef = useRef(0);
 
+  // Speech detection flags
+  const speakingFramesRef = useRef(0);
+  const hasSpeechRef = useRef(false);
+
   // Robust guards against stale state and double-send
   const listeningRef = useRef(false);
   const sentRef = useRef(false);
@@ -200,21 +204,35 @@ function VoiceInputBar({
     }
     analyserRef.current = null;
     timeDataRef.current = null;
+
+    // reset detection/calibration
     calibSumRef.current = 0;
     calibCountRef.current = 0;
+    speakingFramesRef.current = 0;
+    hasSpeechRef.current = false;
+    lastActiveAtRef.current = 0;
+
     setLevel(0);
   }, []);
 
-  const stopAndSend = useCallback(() => {
-    if (sentRef.current) return;
-    sentRef.current = true;
+  const stop = useCallback(
+    (shouldSend: boolean) => {
+      if (sentRef.current && shouldSend) return;
+      if (shouldSend) sentRef.current = true;
 
-    console.log("stopping; listeningRef =", listeningRef.current);
-    cleanup();
-    listeningRef.current = false;
-    setListening(false);
-    onSend();
-  }, [cleanup, onSend]);
+      cleanup();
+      listeningRef.current = false;
+      setListening(false);
+
+      if (shouldSend) onSend();
+    },
+    [cleanup, onSend]
+  );
+
+  const stopAndMaybeSend = useCallback(() => {
+    // Only send if we actually detected speech
+    stop(hasSpeechRef.current && !sentRef.current);
+  }, [stop]);
 
   const startListening = useCallback(async () => {
     if (disabled || listeningRef.current) return;
@@ -251,16 +269,23 @@ function VoiceInputBar({
       listeningRef.current = true;
       setListening(true);
 
-      // Silence detection config
-      const SILENCE_MS = 1000; // auto-send after 1s of no activity
-      const MAX_MS = 15000; // hard cap
-      lastActiveAtRef.current = Date.now(); // ensures even initial silence triggers auto-send
-
-      hardTimeoutRef.current = window.setTimeout(() => stopAndSend(), MAX_MS);
-
-      // Reset calibration
+      // Reset calibration and speech detection
       calibSumRef.current = 0;
       calibCountRef.current = 0;
+      speakingFramesRef.current = 0;
+      hasSpeechRef.current = false;
+      lastActiveAtRef.current = 0; // will set when speech starts
+
+      // Silence detection config
+      const SILENCE_MS = 2000; // auto-send after 1s of no activity, but only after speech started
+      const MAX_MS = 15000; // hard cap (no send if speech never started)
+      const ACTIVATE_FRAMES = 6; // ~100ms of activity to confirm speech start
+
+      const startAt = Date.now();
+      hardTimeoutRef.current = window.setTimeout(() => {
+        // If timeout hits without speech, just stop (no send)
+        stop(false);
+      }, MAX_MS);
 
       const tick = () => {
         const analyserNode = analyserRef.current;
@@ -292,13 +317,35 @@ function VoiceInputBar({
         const threshold = Math.min(Math.max(base + 0.02, 0.02), 0.25);
 
         const now = Date.now();
+
+        // Confirm speech start: require a few consecutive frames above threshold
         if (rms > threshold) {
-          lastActiveAtRef.current = now; // activity detected
+          speakingFramesRef.current += 1;
+          if (
+            !hasSpeechRef.current &&
+            speakingFramesRef.current >= ACTIVATE_FRAMES
+          ) {
+            hasSpeechRef.current = true;
+            lastActiveAtRef.current = now; // start tracking silence window
+          }
+          if (hasSpeechRef.current) {
+            lastActiveAtRef.current = now; // refresh while talking
+          }
+        } else {
+          // decay speaking frames slightly to avoid flicker
+          speakingFramesRef.current = Math.max(
+            0,
+            speakingFramesRef.current - 1
+          );
         }
 
-        // Auto-stop after silence window
-        if (now - lastActiveAtRef.current >= SILENCE_MS) {
-          stopAndSend();
+        // Auto-stop only if speech has started, then we've had silence
+        if (
+          hasSpeechRef.current &&
+          lastActiveAtRef.current > 0 &&
+          now - lastActiveAtRef.current >= SILENCE_MS
+        ) {
+          stop(true);
           return;
         }
 
@@ -313,15 +360,15 @@ function VoiceInputBar({
 
       rafRef.current = requestAnimationFrame(tick);
     } catch (e) {
-      // If mic fails, still proceed so UX isn't blocked
-      stopAndSend();
+      // If mic fails, stop without sending
+      stop(false);
     }
-  }, [disabled, stopAndSend]);
+  }, [disabled, stop]);
 
   const handleButtonClick = () => {
     if (disabled) return;
     if (!listeningRef.current) startListening();
-    else stopAndSend();
+    else stopAndMaybeSend();
   };
 
   useEffect(() => {
@@ -335,7 +382,7 @@ function VoiceInputBar({
 
   return (
     <div className="w-full">
-      <div className="max-w-3xl mx-auto px-6 py-5">
+      <div className="relative z-50 max-w-3xl mx-auto p-6">
         <div className="flex items-center justify-center">
           <motion.button
             onClick={handleButtonClick}
@@ -344,15 +391,12 @@ function VoiceInputBar({
             whileHover={{ scale: disabled ? 1 : 1.05 }}
             whileTap={{ scale: disabled ? 1 : 0.95 }}
           >
-            {/* Background light that reacts to noise level */}
             <motion.div
               className="absolute inset-0 rounded-full blur-2xl"
               style={{ background: "rgba(16, 185, 129, 0.35)" }}
               animate={{ scale: outerGlowScale, opacity: outerGlowOpacity }}
               transition={{ type: "spring", stiffness: 140, damping: 18 }}
             />
-
-            {/* Inner plate responding to noise */}
             <motion.div
               className="absolute inset-4 rounded-full bg-white/10 backdrop-blur-sm"
               animate={{ scale: plateScale }}
@@ -409,7 +453,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
   const translations = {
     en: {
       uploadPrompt: "Upload your swing video to start analysis!",
-      analyzing: "Analyzing your swing...",
+      analyzing: "Analyzing your swing",
       analysisComplete: "I've analyzed your video. Tap the mic to talk.",
       startOver: "Start Over",
       thinking: "Thinking...",
@@ -548,7 +592,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
       </div>
 
       <header className="relative z-10 flex items-center p-6 flex-shrink-0 max-w-5xl mx-auto w-full">
-        <motion.button
+        {/* <motion.button
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           onClick={onBack}
@@ -558,19 +602,8 @@ export function TextChat({ language, onBack }: TextChatProps) {
           <div className="hidden md:block">
             {language === "en" ? "Back" : "戻る"}
           </div>
-        </motion.button>
-
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3"
-        >
-          <h1 className="text-2xl md:text-3xl bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
-            Golf Swing AI
-          </h1>
-        </motion.div>
-
-        <div className="ml-auto flex items-center gap-4">
+        </motion.button> */}
+        <div className="mr-auto flex items-center gap-4">
           <AnimatePresence>
             {videoUploaded && (
               <motion.button
@@ -581,13 +614,23 @@ export function TextChat({ language, onBack }: TextChatProps) {
                 className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 hover:bg-zinc-700/50 rounded-xl transition-colors border border-zinc-700/50"
               >
                 <RotateCcw className="w-4 h-4" />
-                <div className="hidden md:block">
+                <div className="hidden md:block text-sm">
                   {translations[language].startOver}
                 </div>
               </motion.button>
             )}
           </AnimatePresence>
         </div>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3"
+        >
+          <h1 className="text-2xl min-h-[34px] md:text-3xl bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
+            Golf Swing AI
+          </h1>
+        </motion.div>
+        <div className="h-[34px]" />
       </header>
 
       <main className="relative z-10 flex-1 flex flex-col min-h-0">
@@ -618,23 +661,23 @@ export function TextChat({ language, onBack }: TextChatProps) {
               animate={{ opacity: 1 }}
             >
               <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
-                <motion.div
-                  initial={{ y: "40vh", scale: 0.8 }}
-                  animate={{ y: 0, scale: 1 }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
-                  className="p-6 pb-4 flex-shrink-0"
-                >
-                  <div className="max-w-md mx-auto">
-                    <div className="relative rounded-2xl overflow-hidden border border-zinc-800/50 shadow-2xl">
-                      <video
-                        src={videoUrl || ""}
-                        controls
-                        className="w-full h-48 object-cover bg-zinc-900"
-                      />
-                    </div>
-                  </div>
-                </motion.div>
                 <div className="max-w-3xl mx-auto space-y-4">
+                  <motion.div
+                    initial={{ y: "40vh", scale: 0.8 }}
+                    animate={{ y: 0, scale: 1 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="p-6 pb-4 flex-shrink-0 "
+                  >
+                    <div className="flex w-full justify-end">
+                      <div className="relative max-w-[70%] rounded-2xl overflow-hidden w-fit border border-blue-500/30 shadow-2xl">
+                        <video
+                          src={videoUrl || ""}
+                          controls
+                          className="w-auto h-96 object-cover bg-zinc-900"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
                   <AnimatePresence mode="popLayout">
                     {messages.map((message) => (
                       <ChatMessage
@@ -651,7 +694,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
               <AnimatePresence>
                 {showChat && !isAnalyzing && (
                   <motion.div
-                    initial={{ y: "-30vh", opacity: 0 }}
+                    initial={{ y: "-20vh", opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
                     className="flex-shrink-0"

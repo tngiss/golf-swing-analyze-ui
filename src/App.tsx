@@ -16,14 +16,14 @@ export default function App() {
   };
 
   const handleBack = () => {
-    setCurrentPage("language");
+    setCurrentPage("text-chat");
   };
 
   return (
     <>
-      {currentPage === "language" && (
+      {/* {currentPage === "language" && (
         <LanguageSelect onSelect={handleLanguageSelect} />
-      )}
+      )} */}
       {currentPage === "text-chat" && (
         <TextChat language={language} onBack={handleBack} />
       )}

@@ -53,6 +53,7 @@ export function ChatMessage({ message, isAnalyzing }: ChatMessageProps) {
       >
         {isAnalyzing ? (
           <div className="flex items-center gap-3">
+            <span className="text-zinc-300">{message.text}</span>
             <motion.div
               animate={{
                 scale: [1, 1.2, 1],
@@ -65,17 +66,16 @@ export function ChatMessage({ message, isAnalyzing }: ChatMessageProps) {
               }}
               className="flex gap-1"
             >
-              <div className="w-2 h-2 bg-emerald-400 rounded-full" />
+              <div className="size-1 bg-emerald-400 rounded-full" />
               <div
-                className="w-2 h-2 bg-emerald-400 rounded-full"
+                className="size-1 bg-emerald-400 rounded-full"
                 style={{ animationDelay: "0.2s" }}
               />
               <div
-                className="w-2 h-2 bg-emerald-400 rounded-full"
+                className="size-1 bg-emerald-400 rounded-full"
                 style={{ animationDelay: "0.4s" }}
               />
             </motion.div>
-            <span className="text-zinc-300">{message.text}</span>
           </div>
         ) : (
           <p className="text-zinc-200 whitespace-pre-wrap">{message.text}</p>
