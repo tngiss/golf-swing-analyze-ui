@@ -4,6 +4,7 @@ import { Bot, User } from "lucide-react";
 interface ChatMessageProps {
   message: {
     sender: "user" | "ai";
+    image?: string;
     text: string;
   };
   isAnalyzing?: boolean;
@@ -39,10 +40,53 @@ export function ChatMessage({ message, isAnalyzing }: ChatMessageProps) {
       </div>
 
       {/* Message bubble */}
-      <motion.div
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        className={`
+
+      {isAnalyzing ? (
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-300">{message.text}</span>
+          <motion.div
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.5, 1, 0.5],
+            }}
+            transition={{
+              duration: 1.5,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+            className="flex gap-1"
+          >
+            <div className="size-1 bg-emerald-400 rounded-full" />
+            <div
+              className="size-1 bg-emerald-400 rounded-full"
+              style={{ animationDelay: "0.2s" }}
+            />
+            <div
+              className="size-1 bg-emerald-400 rounded-full"
+              style={{ animationDelay: "0.4s" }}
+            />
+          </motion.div>
+        </div>
+      ) : (
+        <div>
+          <motion.div
+            initial={{ scale: 0.95 }}
+            animate={{ scale: 1 }}
+            className="max-w-[80%]"
+          >
+            <div
+              className={`
+                h-96 w-auto mb-4
+                ${!message.image ? "hidden" : ""}
+              `}
+            >
+              <img className="h-full rounded-xl" src={message.image} />
+            </div>
+          </motion.div>
+          <motion.div
+            initial={{ scale: 0.95 }}
+            animate={{ scale: 1 }}
+            className={`
           max-w-[80%] px-5 py-3 rounded-2xl backdrop-blur-sm
           ${
             isUser
@@ -50,37 +94,11 @@ export function ChatMessage({ message, isAnalyzing }: ChatMessageProps) {
               : "bg-zinc-800/50 border border-zinc-700/50"
           }
         `}
-      >
-        {isAnalyzing ? (
-          <div className="flex items-center gap-3">
-            <span className="text-zinc-300">{message.text}</span>
-            <motion.div
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              className="flex gap-1"
-            >
-              <div className="size-1 bg-emerald-400 rounded-full" />
-              <div
-                className="size-1 bg-emerald-400 rounded-full"
-                style={{ animationDelay: "0.2s" }}
-              />
-              <div
-                className="size-1 bg-emerald-400 rounded-full"
-                style={{ animationDelay: "0.4s" }}
-              />
-            </motion.div>
-          </div>
-        ) : (
-          <p className="text-zinc-200 whitespace-pre-wrap">{message.text}</p>
-        )}
-      </motion.div>
+          >
+            <p className="text-zinc-200 whitespace-pre-wrap">{message.text}</p>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 }

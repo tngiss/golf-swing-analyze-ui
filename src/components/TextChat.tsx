@@ -10,143 +10,29 @@ type Message = {
   id: number;
   sender: "user" | "ai";
   text: string;
+  image?: string;
   isAnalyzing?: boolean;
 };
 
-const conversations = {
-  en: [
-    {
-      sender: "user" as const,
-      text: "Messed up again. What exactly is wrong here?",
-    },
-    {
-      sender: "ai" as const,
-      text: "Watched it! Great scenery. But I noticed you stumbled backward at the end. That was a 'Push-Slice' into the right, wasn't it? You have great speed, so let's fix this!",
-    },
-    {
-      sender: "user" as const,
-      text: "Yeah, straight into the woods... I always slice and lose my balance.",
-    },
-    {
-      sender: "ai" as const,
-      text: "I see. Based on the guidelines, the issues are an 'Outside-In Path' and 'Insufficient Weight Transfer.' Stumbling back means you're hanging back on your right foot to lift the ball.",
-    },
-    {
-      sender: "user" as const,
-      text: "I get told I 'hang back' a lot lol. How do I fix it?",
-    },
-    {
-      sender: "ai" as const,
-      text: "There's a great drill for this: 'Stabilize the Finish.' Next time, I want you to 'stand on your left leg and freeze for 3 seconds' after every shot. No matter where the ball goes.",
-    },
-    {
-      sender: "user" as const,
-      text: "Stop for 3 seconds? Sounds impossible right now... Will that actually fix the slice?",
-    },
-    {
-      sender: "ai" as const,
-      text: "It will! Because you have to transfer your weight to hold that pose. That naturally corrects your swing path. No full power swings for now—stick to 70%.",
-    },
-    {
-      sender: "user" as const,
-      text: "Got it. Also, I tend to start with my hands from the top. Is that related?",
-    },
-    {
-      sender: "ai" as const,
-      text: "Definitely! You need the 'Lower Body Lead' mentioned in the guidelines. Try to keep your 'back facing the target' for a split second while you step down with your left foot.",
-    },
-    {
-      sender: "user" as const,
-      text: "'Back to the target,' okay. I guess steering with my hands was making it worse.",
-    },
-    {
-      sender: "ai" as const,
-      text: "Exactly! Steering with hands opens the face. Use 'Slow-Motion Swings' to drill that feeling into your body. It's the fastest way to improve.",
-    },
-    {
-      sender: "user" as const,
-      text: "Understood! I'll try slow swings and the '3-second stop' next time.",
-    },
-    {
-      sender: "ai" as const,
-      text: "Perfect. Once your balance is set, you'll hit it even further. Focus on that finish!",
-    },
-    {
-      sender: "user" as const,
-      text: "Going to practice this weekend! Can you check my next video?",
-    },
-    {
-      sender: "ai" as const,
-      text: "Of course! Can't wait. Try to get 'Face-On' and 'Behind' angles next time. Good luck! 🏌️‍♂️✨",
-    },
-  ],
-  jp: [
-    {
-      sender: "user" as const,
-      text: "またミスしちゃいました。これ、どこが悪いですか？",
-    },
-    {
-      sender: "ai" as const,
-      text: "動画拝見しました！いい景色ですね。 でも打った後のリアクションと、後ろによろけているのが気になります。これ、『右へのプッシュスライス』が出ちゃいましたよね？すごく振れているのにもったいない！",
-    },
-    {
-      sender: "user" as const,
-      text: "そう、右の林へ一直線です…。いつもスライスするし、フィニッシュでよろけちゃうんです。",
-    },
-    {
-      sender: "ai" as const,
-      text: "なるほど。ガイドラインで見ると、『アウトサイドイン軌道』と『インパクト後の体重移動不足』が原因ですね。 よろけるのは、ボールを上げようとして右足に体重が残りすぎている（明治の大砲）からですよ。",
-    },
-    {
-      sender: "user" as const,
-      text: "『明治の大砲』よく言われます（笑）。どうすれば直りますか？",
-    },
-    {
-      sender: "ai" as const,
-      text: "特効薬があります！ガイドラインにある『フィニッシュの安定』ドリルです。 次回の練習では、どんな球が出てもいいので、『打ち終わった後に左足一本で立ち、3秒間ピタッと止まる』ことだけ意識してください。",
-    },
-    {
-      sender: "user" as const,
-      text: "3秒止まる？今は絶対無理そう…。それでスライスも直るんですか？",
-    },
-    {
-      sender: "ai" as const,
-      text: "直ります！3秒止まるには左足に乗り切る必要があるからです。 そうすると自然に軌道が修正されますよ。まずはマン振り禁止で、7割の力でやってみてください。",
-    },
-    {
-      sender: "user" as const,
-      text: "なるほど。あと、切り返しで手から行っちゃう癖も関係ありますか？",
-    },
-    {
-      sender: "ai" as const,
-      text: "大いに関係あります！上級者ガイドラインにある『下半身リード』が必要です。 トップで一瞬『背中をターゲットに向けたまま』、左足を踏み込むイメージを持ってみてください。",
-    },
-    {
-      sender: "user" as const,
-      text: "『背中を向けたまま』ですね。手で合わせに行ってたから余計ダメだったのか。",
-    },
-    {
-      sender: "ai" as const,
-      text: "その通りです！手先だとフェースが開きます。 まずは**『スローモーションスイング』で、今の動きを体に覚え込ませるのが一番の近道ですよ。",
-    },
-    {
-      sender: "user" as const,
-      text: "了解です！次はマン振りせず、スロー素振りと『3秒止め』やってみます。",
-    },
-    {
-      sender: "ai" as const,
-      text: "いいですね！バランスが整えばもっと飛びますよ。 まずはフィニッシュ重視でいきましょう！",
-    },
-    {
-      sender: "user" as const,
-      text: "週末練習してきます！また動画見てもらえますか？",
-    },
-    {
-      sender: "ai" as const,
-      text: "もちろんです！楽しみに待ってますね。 次は『後ろ』と『正面』**から撮れると嬉しいです。応援してます！🏌️‍♂️✨",
-    },
-  ],
-};
+const conversations = [
+  {
+    sender: "user" as const,
+    text: "最も重要な改善点を1つ教えてください",
+  },
+  {
+    sender: "ai" as const,
+    image: "/image.png",
+    text: "最も重要な改善点は、ダウンスイングのパスです。クラブヘッドが体のラインの内側を維持することで、曲がりを減らし、真っ直ぐな飛距離を確保できます。ミラーやヘッドラインのドリルを使用して、インサイドアウトのパスを練習してください。",
+  },
+  {
+    sender: "user" as const,
+    text: "What's the best drill to practice this? ",
+  },
+  {
+    sender: "ai" as const,
+    text: "The best drill to practice the downswing path is the “mirror drill.” Stand in front of a mirror and focus on keeping the club head inside the line of your body throughout the downswing, ensuring an inside-out path. This visual feedback helps reinforce proper technique and consistency.",
+  },
+];
 
 interface TextChatProps {
   language: Language;
@@ -517,18 +403,18 @@ export function TextChat({ language, onBack }: TextChatProps) {
   };
 
   const handleVoiceSend = () => {
-    const conv = conversations[language];
-    if (!conv || convIndex >= conv.length) return;
+    if (!conversations || convIndex >= conversations.length) return;
     if (isAnalyzing || isResponding) return;
 
     let idx = convIndex;
-    if (conv[idx]?.sender !== "user") {
-      while (idx < conv.length && conv[idx].sender !== "user") idx++;
-      if (idx >= conv.length) return;
+    if (conversations[idx]?.sender !== "user") {
+      while (idx < conversations.length && conversations[idx].sender !== "user")
+        idx++;
+      if (idx >= conversations.length) return;
     }
 
-    const userMsg = conv[idx];
-    const aiMsg = conv[idx + 1];
+    const userMsg = conversations[idx];
+    const aiMsg = conversations[idx + 1];
 
     setMessages((prev) => [
       ...prev,
@@ -553,7 +439,12 @@ export function TextChat({ language, onBack }: TextChatProps) {
         if (aiMsg && aiMsg.sender === "ai") {
           return [
             ...withoutLoader,
-            { id: Date.now() + 2, sender: "ai", text: aiMsg.text },
+            {
+              id: Date.now() + 2,
+              sender: "ai",
+              image: aiMsg.image ?? aiMsg.image,
+              text: aiMsg.text,
+            },
           ];
         }
         return withoutLoader;
@@ -574,7 +465,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
   };
 
   const micDisabled =
-    isResponding || isAnalyzing || convIndex >= conversations[language].length;
+    isResponding || isAnalyzing || convIndex >= conversations.length;
 
   return (
     <div className="h-dvh bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white relative overflow-hidden flex flex-col">
