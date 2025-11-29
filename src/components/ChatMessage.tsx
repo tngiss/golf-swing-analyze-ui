@@ -1,104 +1,69 @@
 import { motion } from "motion/react";
-import { Bot, User } from "lucide-react";
+import type { Message } from "./TextChat";
+import { Bot } from "lucide-react";
 
 interface ChatMessageProps {
-  message: {
-    sender: "user" | "ai";
-    image?: string;
-    text: string;
-  };
+  message: Message;
   isAnalyzing?: boolean;
 }
 
-export function ChatMessage({ message, isAnalyzing }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  isAnalyzing: isAnalyzingProp,
+}: ChatMessageProps) {
   const isUser = message.sender === "user";
+  const analyzing = isAnalyzingProp ?? message.isAnalyzing;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.4 }}
-      className={`flex gap-3 items-end ${isUser ? "flex-row-reverse" : "flex-row"}`}
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      className={`flex w-full items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}
     >
-      {/* Avatar */}
-      <div
-        className={`
-        flex-shrink-0 size-8 mb-1 rounded-full flex items-center justify-center
-        ${
-          isUser
-            ? "hidden"
-            : "bg-gradient-to-br from-emerald-600 to-emerald-700"
-        }
-      `}
-      >
-        {isUser ? (
-          <User className="w-5 h-5 text-white" />
-        ) : (
+      {!isUser && (
+        <div className="flex-shrink-0 size-8 mb-1 rounded-full flex items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-700">
           <Bot className="w-5 h-5 text-white" />
-        )}
-      </div>
-
-      {/* Message bubble */}
-
-      {isAnalyzing ? (
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-300">{message.text}</span>
-          <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.5, 1, 0.5],
-            }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-            className="flex gap-1"
-          >
-            <div className="size-1 bg-emerald-400 rounded-full" />
-            <div
-              className="size-1 bg-emerald-400 rounded-full"
-              style={{ animationDelay: "0.2s" }}
-            />
-            <div
-              className="size-1 bg-emerald-400 rounded-full"
-              style={{ animationDelay: "0.4s" }}
-            />
-          </motion.div>
-        </div>
-      ) : (
-        <div>
-          <motion.div
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-            className="max-w-[80%]"
-          >
-            <div
-              className={`
-                h-96 w-auto mb-4
-                ${!message.image ? "hidden" : ""}
-              `}
-            >
-              <img className="h-full rounded-xl" src={message.image} />
-            </div>
-          </motion.div>
-          <motion.div
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-            className={`
-          max-w-[80%] px-5 py-3 rounded-2xl backdrop-blur-sm
-          ${
-            isUser
-              ? "bg-blue-500/20 border border-blue-500/30"
-              : "bg-zinc-800/50 border border-zinc-700/50"
-          }
-        `}
-          >
-            <p className="text-zinc-200 whitespace-pre-wrap">{message.text}</p>
-          </motion.div>
         </div>
       )}
+      <div>
+        {message.image && !analyzing && (
+          <div className="mb-4 h-96 overflow-hidden">
+            <img
+              src={message.image}
+              alt=""
+              className="w-auto h-full object-cover rounded-xl"
+            />
+          </div>
+        )}
+        <div
+          className={`max-w-[80%] rounded-2xl px-4 py-3 border ${isUser ? "bg-emerald-600/20 border-emerald-600/30" : "bg-zinc-800/60 border-zinc-700/60"}`}
+        >
+          <div className="flex items-center gap-2">
+            <div className="whitespace-pre-wrap text-sm md:text-base text-zinc-100">
+              {message.text}
+            </div>
+            {analyzing && (
+              <div className="flex items-center gap-1 pl-1">
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isUser ? "bg-emerald-300" : "bg-zinc-300"
+                    }`}
+                    animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
+                    transition={{
+                      duration: 1,
+                      repeat: Infinity,
+                      delay: i * 0.15,
+                      ease: "easeInOut",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }

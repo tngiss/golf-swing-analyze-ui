@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { VideoUpload } from "./VideoUpload";
 import { ChatMessage } from "./ChatMessage";
-import { RotateCcw, ArrowLeft, Mic } from "lucide-react";
+import { RotateCcw, Mic } from "lucide-react";
 
 type Language = "en" | "jp";
 
-type Message = {
+export type Message = {
   id: number;
   sender: "user" | "ai";
   text: string;
@@ -23,6 +23,7 @@ const conversations = [
     sender: "ai" as const,
     image: "/image.png",
     text: "最も重要な改善点は、ダウンスイングのパスです。クラブヘッドが体のラインの内側を維持することで、曲がりを減らし、真っ直ぐな飛距離を確保できます。ミラーやヘッドラインのドリルを使用して、インサイドアウトのパスを練習してください。",
+    delay: 10000,
   },
   {
     sender: "user" as const,
@@ -31,6 +32,7 @@ const conversations = [
   {
     sender: "ai" as const,
     text: "The best drill to practice the downswing path is the “mirror drill.” Stand in front of a mirror and focus on keeping the club head inside the line of your body throughout the downswing, ensuring an inside-out path. This visual feedback helps reinforce proper technique and consistency.",
+    delay: 2000,
   },
 ];
 
@@ -44,10 +46,10 @@ function VoiceInputBar({
   onSend,
 }: {
   disabled: boolean;
-  onSend: () => void; // parent uses static scripted message
+  onSend: () => void;
 }) {
   const [listening, setListening] = useState(false);
-  const [level, setLevel] = useState(0); // 0..1 audio level for animations
+  const [level, setLevel] = useState(0);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -61,11 +63,9 @@ function VoiceInputBar({
   const calibSumRef = useRef(0);
   const calibCountRef = useRef(0);
 
-  // Speech detection flags
   const speakingFramesRef = useRef(0);
   const hasSpeechRef = useRef(false);
 
-  // Robust guards against stale state and double-send
   const listeningRef = useRef(false);
   const sentRef = useRef(false);
 
@@ -91,7 +91,6 @@ function VoiceInputBar({
     analyserRef.current = null;
     timeDataRef.current = null;
 
-    // reset detection/calibration
     calibSumRef.current = 0;
     calibCountRef.current = 0;
     speakingFramesRef.current = 0;
@@ -116,7 +115,6 @@ function VoiceInputBar({
   );
 
   const stopAndMaybeSend = useCallback(() => {
-    // Only send if we actually detected speech
     stop(hasSpeechRef.current && !sentRef.current);
   }, [stop]);
 
@@ -150,26 +148,21 @@ function VoiceInputBar({
       const time = new Uint8Array(analyser.fftSize);
       timeDataRef.current = time;
 
-      // set "recording" flags
       sentRef.current = false;
       listeningRef.current = true;
       setListening(true);
 
-      // Reset calibration and speech detection
       calibSumRef.current = 0;
       calibCountRef.current = 0;
       speakingFramesRef.current = 0;
       hasSpeechRef.current = false;
-      lastActiveAtRef.current = 0; // will set when speech starts
+      lastActiveAtRef.current = 0;
 
-      // Silence detection config
-      const SILENCE_MS = 2000; // auto-send after 1s of no activity, but only after speech started
-      const MAX_MS = 15000; // hard cap (no send if speech never started)
-      const ACTIVATE_FRAMES = 6; // ~100ms of activity to confirm speech start
+      const SILENCE_MS = 2000;
+      const MAX_MS = 15000;
+      const ACTIVATE_FRAMES = 6;
 
-      const startAt = Date.now();
       hardTimeoutRef.current = window.setTimeout(() => {
-        // If timeout hits without speech, just stop (no send)
         stop(false);
       }, MAX_MS);
 
@@ -180,16 +173,14 @@ function VoiceInputBar({
 
         analyserNode.getByteTimeDomainData(td);
 
-        // Compute RMS
         let sumSquares = 0;
         for (let i = 0; i < td.length; i++) {
           const v = (td[i] - 128) / 128;
           sumSquares += v * v;
         }
         let rms = Math.sqrt(sumSquares / td.length);
-        rms = Math.min(1, rms * 2.5); // mild visual boost
+        rms = Math.min(1, rms * 2.5);
 
-        // Calibrate ambient baseline for ~300ms
         if (calibCountRef.current < 18) {
           calibSumRef.current += rms;
           calibCountRef.current += 1;
@@ -199,12 +190,10 @@ function VoiceInputBar({
             ? calibSumRef.current / calibCountRef.current
             : 0.01;
 
-        // Dynamic threshold above noise floor
         const threshold = Math.min(Math.max(base + 0.02, 0.02), 0.25);
 
         const now = Date.now();
 
-        // Confirm speech start: require a few consecutive frames above threshold
         if (rms > threshold) {
           speakingFramesRef.current += 1;
           if (
@@ -212,20 +201,18 @@ function VoiceInputBar({
             speakingFramesRef.current >= ACTIVATE_FRAMES
           ) {
             hasSpeechRef.current = true;
-            lastActiveAtRef.current = now; // start tracking silence window
+            lastActiveAtRef.current = now;
           }
           if (hasSpeechRef.current) {
-            lastActiveAtRef.current = now; // refresh while talking
+            lastActiveAtRef.current = now;
           }
         } else {
-          // decay speaking frames slightly to avoid flicker
           speakingFramesRef.current = Math.max(
             0,
             speakingFramesRef.current - 1
           );
         }
 
-        // Auto-stop only if speech has started, then we've had silence
         if (
           hasSpeechRef.current &&
           lastActiveAtRef.current > 0 &&
@@ -235,7 +222,6 @@ function VoiceInputBar({
           return;
         }
 
-        // Smooth visual level 0..1
         setLevel((prev) => {
           const target = Math.min(1, rms / 0.35);
           return prev * 0.65 + target * 0.35;
@@ -245,8 +231,7 @@ function VoiceInputBar({
       };
 
       rafRef.current = requestAnimationFrame(tick);
-    } catch (e) {
-      // If mic fails, stop without sending
+    } catch {
       stop(false);
     }
   }, [disabled, stop]);
@@ -261,7 +246,6 @@ function VoiceInputBar({
     return () => cleanup();
   }, [cleanup]);
 
-  // Map level to responsive animations
   const outerGlowOpacity = listening ? 0.25 + level * 0.6 : 0.25;
   const outerGlowScale = listening ? 1 + level * 0.3 : 1;
   const plateScale = listening ? 1 + level * 0.06 : 1;
@@ -289,7 +273,6 @@ function VoiceInputBar({
               transition={{ type: "spring", stiffness: 180, damping: 16 }}
             />
 
-            {/* Icon / mini bars react to level */}
             <div className="relative z-10">
               {listening ? (
                 <div className="flex gap-1.5 items-end">
@@ -342,7 +325,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
       analyzing: "Analyzing your swing",
       analysisComplete: "I've analyzed your video. Tap the mic to talk.",
       startOver: "Start Over",
-      thinking: "Thinking...",
+      thinking: "Thinking",
     },
     jp: {
       uploadPrompt: "スイング動画をアップロードして分析開始！",
@@ -371,9 +354,10 @@ export function TextChat({ language, onBack }: TextChatProps) {
         setShowChat(true);
         setIsAnalyzing(true);
 
+        const analyzeMessageId = Date.now();
         setMessages([
           {
-            id: Date.now(),
+            id: analyzeMessageId,
             sender: "ai",
             text: translations[language].analyzing,
             isAnalyzing: true,
@@ -381,14 +365,19 @@ export function TextChat({ language, onBack }: TextChatProps) {
         ]);
 
         const timeoutId = setTimeout(() => {
+          // Replace text in the same chat bubble (keep same id)
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === analyzeMessageId
+                ? {
+                    ...m,
+                    text: translations[language].analysisComplete,
+                    isAnalyzing: false,
+                  }
+                : m
+            )
+          );
           setIsAnalyzing(false);
-          setMessages([
-            {
-              id: Date.now() + 1,
-              sender: "ai",
-              text: translations[language].analysisComplete,
-            },
-          ]);
         }, 3000);
 
         return () => clearTimeout(timeoutId);
@@ -415,12 +404,15 @@ export function TextChat({ language, onBack }: TextChatProps) {
 
     const userMsg = conversations[idx];
     const aiMsg = conversations[idx + 1];
+    const aiDelay = aiMsg?.delay ?? 1200;
 
+    // Add user message
     setMessages((prev) => [
       ...prev,
       { id: Date.now(), sender: "user", text: userMsg.text },
     ]);
 
+    // Add single loader message (will be replaced in-place)
     const loaderId = Date.now() + 1;
     setIsResponding(true);
     setMessages((prev) => [
@@ -434,24 +426,22 @@ export function TextChat({ language, onBack }: TextChatProps) {
     ]);
 
     setTimeout(() => {
-      setMessages((prev) => {
-        const withoutLoader = prev.filter((m) => m.id !== loaderId);
-        if (aiMsg && aiMsg.sender === "ai") {
-          return [
-            ...withoutLoader,
-            {
-              id: Date.now() + 2,
-              sender: "ai",
-              image: aiMsg.image ?? aiMsg.image,
-              text: aiMsg.text,
-            },
-          ];
-        }
-        return withoutLoader;
-      });
+      // Replace text in the same message, do not add/remove bubbles
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loaderId
+            ? {
+                ...m,
+                text: aiMsg.text,
+                image: aiMsg.image,
+                isAnalyzing: false,
+              }
+            : m
+        )
+      );
       setConvIndex(idx + 2);
       setIsResponding(false);
-    }, 1200);
+    }, aiDelay);
   };
 
   const handleStartOver = () => {
@@ -483,17 +473,6 @@ export function TextChat({ language, onBack }: TextChatProps) {
       </div>
 
       <header className="relative z-10 flex items-center p-6 flex-shrink-0 max-w-5xl mx-auto w-full">
-        {/* <motion.button
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          onClick={onBack}
-          className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 hover:bg-zinc-700/50 rounded-xl transition-colors border border-zinc-700/50"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <div className="hidden md:block">
-            {language === "en" ? "Back" : "戻る"}
-          </div>
-        </motion.button> */}
         <div className="mr-auto flex items-center gap-4">
           <AnimatePresence>
             {videoUploaded && (
@@ -557,7 +536,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
                     initial={{ y: "40vh", scale: 0.8 }}
                     animate={{ y: 0, scale: 1 }}
                     transition={{ duration: 0.6, ease: "easeOut" }}
-                    className="p-6 pb-4 flex-shrink-0 "
+                    className="p-6 pb-4 flex-shrink-0"
                   >
                     <div className="flex w-full justify-end">
                       <div className="relative max-w-[70%] rounded-2xl overflow-hidden w-fit border border-blue-500/30 shadow-2xl">
@@ -569,7 +548,8 @@ export function TextChat({ language, onBack }: TextChatProps) {
                       </div>
                     </div>
                   </motion.div>
-                  <AnimatePresence mode="popLayout">
+
+                  <div className="space-y-4">
                     {messages.map((message) => (
                       <ChatMessage
                         key={message.id}
@@ -577,8 +557,8 @@ export function TextChat({ language, onBack }: TextChatProps) {
                         isAnalyzing={message.isAnalyzing}
                       />
                     ))}
-                  </AnimatePresence>
-                  <div ref={messagesEndRef} />
+                    <div ref={messagesEndRef} />
+                  </div>
                 </div>
               </div>
 
