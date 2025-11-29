@@ -25,7 +25,7 @@ export function ChatMessage({
           <Bot className="w-5 h-5 text-white" />
         </div>
       )}
-      <div>
+      <div className="max-w-[80%]">
         {message.image && !analyzing && (
           <div className="mb-4 h-96 overflow-hidden">
             <img
@@ -36,7 +36,7 @@ export function ChatMessage({
           </div>
         )}
         <div
-          className={`max-w-[80%] rounded-2xl px-4 py-3 border ${isUser ? "bg-emerald-600/20 border-emerald-600/30" : "bg-zinc-800/60 border-zinc-700/60"}`}
+          className={`w-full rounded-2xl px-4 py-3 border ${isUser ? "bg-emerald-600/20 border-emerald-600/30" : "bg-zinc-800/60 border-zinc-700/60"}`}
         >
           <div className="flex items-center gap-2">
             <div className="whitespace-pre-wrap text-sm md:text-base text-zinc-100">

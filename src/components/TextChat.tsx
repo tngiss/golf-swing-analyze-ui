@@ -23,7 +23,7 @@ const conversations = [
     sender: "ai" as const,
     image: "/image.png",
     text: "最も重要な改善点は、ダウンスイングのパスです。クラブヘッドが体のラインの内側を維持することで、曲がりを減らし、真っ直ぐな飛距離を確保できます。ミラーやヘッドラインのドリルを使用して、インサイドアウトのパスを練習してください。",
-    delay: 10000,
+    delay: 5000,
   },
   {
     sender: "user" as const,
@@ -378,7 +378,7 @@ export function TextChat({ language, onBack }: TextChatProps) {
             )
           );
           setIsAnalyzing(false);
-        }, 3000);
+        }, 5000);
 
         return () => clearTimeout(timeoutId);
       }, 600);
@@ -563,19 +563,17 @@ export function TextChat({ language, onBack }: TextChatProps) {
               </div>
 
               <AnimatePresence>
-                {showChat && !isAnalyzing && (
-                  <motion.div
-                    initial={{ y: "-20vh", opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
-                    className="flex-shrink-0"
-                  >
-                    <VoiceInputBar
-                      disabled={micDisabled}
-                      onSend={handleVoiceSend}
-                    />
-                  </motion.div>
-                )}
+                <motion.div
+                  initial={{ y: "-20vh", opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+                  className="flex-shrink-0"
+                >
+                  <VoiceInputBar
+                    disabled={micDisabled}
+                    onSend={handleVoiceSend}
+                  />
+                </motion.div>
               </AnimatePresence>
             </motion.div>
           )}
